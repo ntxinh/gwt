@@ -47,6 +47,7 @@ type model struct {
 	focus    int
 	selected *Worktree
 	status   string
+	adding   bool // true while an Add actionMsg is in flight
 }
 
 var (
@@ -108,9 +109,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actionMsg:
 		if msg.err != nil {
 			m.status = msg.err.Error()
+			if m.adding { // add failed → back to the form, fields preserved
+				m.mode = modeAdd
+			}
 		} else {
 			m.status = ""
 		}
+		m.adding = false
 		return m, listWorktreesCmd // reload after every mutation
 	}
 
@@ -214,6 +219,8 @@ func (m model) submitAdd() (tea.Model, tea.Cmd) {
 	root := items[0].(item).wt.Path // first porcelain record = main worktree
 	path := filepath.Join(root, ".worktrees", dirName)
 	m.status = ""
+	m.mode = modeList // spec §6: success → List; on failure actionMsg returns to modeAdd
+	m.adding = true
 	return m, doCmd(func() error {
 		if err := ensureExcluded(); err != nil {
 			return err
