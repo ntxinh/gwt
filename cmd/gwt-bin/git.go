@@ -129,12 +129,17 @@ func ensureExcluded() error {
 		return err
 	}
 	p := filepath.Join(abs, "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil { // git init --template= may leave no info/
+		return err
+	}
 	b, err := os.ReadFile(p)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if strings.Contains(string(b), ".worktrees/") {
-		return nil
+	for _, line := range strings.Split(string(b), "\n") { // line-exact: comments/lookalikes must not suppress the rule
+		if strings.TrimSpace(line) == ".worktrees/" {
+			return nil
+		}
 	}
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {

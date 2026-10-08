@@ -109,7 +109,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actionMsg:
 		if msg.err != nil {
 			m.status = msg.err.Error()
-			if m.adding { // add failed → back to the form, fields preserved
+			if m.adding && m.mode == modeList { // failed add → back to form only if user is still there
 				m.mode = modeAdd
 			}
 		} else {
@@ -237,7 +237,7 @@ func (m model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeList
 			m.selected = nil
 			return m, doCmd(func() error { return removeWorktree(path) })
-		case "n", "N", "esc":
+		case "n", "N", "esc", "enter":
 			m.mode = modeList
 			m.selected = nil
 		}
@@ -251,7 +251,7 @@ func (m model) updateConfirmPrune(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y", "Y":
 			m.mode = modeList
 			return m, doCmd(pruneWorktrees)
-		case "n", "N", "esc":
+		case "n", "N", "esc", "enter":
 			m.mode = modeList
 		}
 	}
