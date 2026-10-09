@@ -14,16 +14,30 @@ import (
 var (
 	activeBorder   = lipgloss.Color("10") // green bold
 	inactiveBorder = lipgloss.Color("8")
-	selStyle       = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("236"))
-	curStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	warnStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // red: errors, prunable
-	lockStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // yellow: locked, detached
-	branchStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("14")) // cyan: branch names (lazygit FgCyan)
-	dimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	optsStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // blue: options bar (lazygit OptionsTextColor)
-	modalStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
-			BorderForeground(activeBorder).Padding(0, 1)
+	selStyle       lipgloss.Style
+	curStyle       lipgloss.Style
+	warnStyle      lipgloss.Style // red: errors, prunable
+	lockStyle      lipgloss.Style // yellow: locked, detached
+	branchStyle    lipgloss.Style // cyan: branch names (lazygit FgCyan)
+	dimStyle       lipgloss.Style
+	optsStyle      lipgloss.Style // blue: options bar (lazygit OptionsTextColor)
+	modalStyle     lipgloss.Style
 )
+
+// initStyles builds the styles AFTER main has bound lipgloss's default
+// renderer to stderr — package-level NewStyle() would capture the
+// stdout-based renderer at init and see a pipe under `gwt()`, never a TTY.
+func initStyles() {
+	selStyle = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("236"))
+	curStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	warnStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	lockStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	branchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	dimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	optsStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+	modalStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
+		BorderForeground(activeBorder).Padding(0, 1)
+}
 
 func clamp(v, lo, hi int) int {
 	if v < lo {

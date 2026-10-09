@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type mode int
@@ -267,6 +268,10 @@ func (m model) updateConfirmPrune(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func main() {
+	// UI renders on stderr; stdout is piped through the fish wrapper, so a
+	// stdout-profiled renderer would see a pipe and emit no colors.
+	lipgloss.SetDefaultRenderer(lipgloss.NewRenderer(os.Stderr))
+	initStyles()                               // styles capture the renderer at creation — must follow the bind
 	if _, err := listWorktrees(); err != nil { // spec §4 fatal path: stderr + exit 1
 		fmt.Fprintln(os.Stderr, "gwt:", err)
 		os.Exit(1)
