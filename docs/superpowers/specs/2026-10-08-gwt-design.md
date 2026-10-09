@@ -16,8 +16,8 @@ A fast, focused Terminal User Interface for managing Git worktrees. Eliminates t
 
 ```
 gwt/
-├── cmd/gwt-bin/
-│   ├── main.go      — model, states, key handling, Update/View
+│   ├── main.go      — model, states, key handling, Update
+│   ├── view.go      — lazygit-style panel layout, styles, modal overlay
 │   ├── git.go       — `git worktree list --porcelain` parsing, add/remove/prune wrappers
 │   └── git_test.go  — porcelain parser tests (the only real logic)
 ├── gwt.fish         — canonical source of the fish function; copied to ~/.config/fish/functions/
@@ -60,7 +60,7 @@ end
 ### State: List (default)
 
 - Data: parse `git worktree list --porcelain` into `{path, branch, head, bare, detached, locked, prunable}`.
-- View: rows of `path — branch — short-HEAD`. Branch cell shows `(detached)` when HEAD is detached, `(bare)` for bare repos; locked worktrees get a `*` suffix on the path. Order is git's order (main worktree first).
+- View (lazygit layout): a rounded-border `Worktrees` panel (≈⅓ width, green active border) beside a `Details` panel showing Path/Branch/HEAD/Flags of the selection; a one-line blue options bar sits at the bottom. Rows are `name  branch` single lines (name = `filepath.Base(path)`); `*` marks the worktree containing cwd, `[locked]`/`[prunable]` suffix in red. Order is git's order (main worktree first).
 - Keys:
   - `j`/`k`, `up`/`down` — navigate
   - `enter` — jump: write selected path to stdout, quit
@@ -70,9 +70,9 @@ end
   - `q` / `esc` — quit, no output
   - `r` — reload list *(tiny, included: after external git ops while gwt stays open)*
 
-### State: Add
+### State: Add (modal)
 
-- View: two text inputs — 1) directory name, 2) branch name.
+- View: centered bordered box `New worktree` over the list layout, containing two text inputs — 1) directory name, 2) branch name. Delete/prune confirmations are likewise centered modal boxes.
 - Focus: `tab` / `shift+tab` / `up` / `down` cycle the two fields; `esc` cancels to List.
 - `enter` (from either field): directory name required — empty dir does nothing (status hint). Resolve path as `<main-worktree-root>/.worktrees/<name>` (root = first `worktree` record in the porcelain output — always an absolute path, so gwt's cwd is irrelevant).
   - Non-empty branch → `git worktree add <path> -b <branch>`
@@ -105,4 +105,4 @@ All `git worktree` invocations return `cmd.CombinedOutput` on failure; the trimm
 
 ## 9. Dependencies
 
-`bubbletea`, `bubbles`, `lipgloss` — already-decided pins via `go mod tidy`.
+`bubbletea`, `bubbles` (textinput only), `lipgloss`, `x/ansi` (ANSI-aware truncate/cut for the overlay) — pins via `go mod tidy`.

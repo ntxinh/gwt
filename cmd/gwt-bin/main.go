@@ -6,10 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type mode int
@@ -21,18 +19,6 @@ const (
 	modeConfirmPrune
 )
 
-type item struct{ wt Worktree }
-
-func (i item) Title() string {
-	t := i.wt.Path // spec §6: row shows the path; locked gets a * suffix
-	if i.wt.Locked {
-		t += " *"
-	}
-	return t
-}
-func (i item) Description() string { return i.wt.BranchName() + "  " + i.wt.ShortHead() }
-func (i item) FilterValue() string { return i.wt.Path }
-
 type listWorktreesMsg struct {
 	wts []Worktree
 	err error
@@ -41,36 +27,27 @@ type listWorktreesMsg struct {
 type actionMsg struct{ err error }
 
 type model struct {
-	mode     mode
-	list     list.Model
-	inputs   [2]textinput.Model
-	focus    int
-	selected *Worktree
-	status   string
-	adding   bool // true while an Add actionMsg is in flight
+	mode      mode
+	wts       []Worktree
+	cursor    int
+	offset    int // first visible row index for scroll
+	w, h      int // terminal dims from WindowSizeMsg
+	inputs    [2]textinput.Model
+	focus     int
+	selected  int // worktree index while confirming delete
+	status    string
+	adding    bool // true while an Add actionMsg is in flight
+	currentWt int  // index of worktree containing cwd, -1 when none
 }
 
-var (
-	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-)
-
 func initialModel() model {
-	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "git worktrees"
-	l.SetShowHelp(false)
-	l.SetShowStatusBar(false)
-	l.SetShowFilter(false)
-	l.SetFilteringEnabled(false)
-	l.SetShowPagination(false)
-
 	dir := textinput.New()
 	dir.Placeholder = "directory name"
 	dir.Focus()
 	branch := textinput.New()
 	branch.Placeholder = "branch (empty = auto-name)"
 
-	return model{mode: modeList, list: l, inputs: [2]textinput.Model{dir, branch}}
+	return model{mode: modeList, selected: -1, currentWt: -1, inputs: [2]textinput.Model{dir, branch}}
 }
 
 func listWorktreesCmd() tea.Msg {
@@ -91,18 +68,18 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height-2)
+		m.w, m.h = msg.Width, msg.Height
 		return m, nil
 	case listWorktreesMsg:
 		if msg.err != nil {
 			m.status = msg.err.Error()
 			return m, nil
 		}
-		items := make([]list.Item, len(msg.wts))
-		for i, w := range msg.wts {
-			items[i] = item{wt: w}
+		m.wts = msg.wts
+		m.currentWt = currentWorktree(msg.wts)
+		if m.cursor >= len(m.wts) {
+			m.cursor = max(0, len(m.wts)-1)
 		}
-		m.list.SetItems(items)
 		// NOTE: do NOT clear m.status here — the reload that follows every
 		// mutation must not erase a just-set error message.
 		return m, nil
@@ -137,16 +114,50 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// currentWorktree finds the worktree whose path contains cwd (lazygit marks it *).
+func currentWorktree(wts []Worktree) int {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return -1
+	}
+	best, bestLen := -1, -1
+	for i, w := range wts {
+		if strings.HasPrefix(cwd+string(os.PathSeparator), w.Path+string(os.PathSeparator)) && len(w.Path) > bestLen {
+			best, bestLen = i, len(w.Path)
+		}
+	}
+	return best
+}
+
+// moveCursor adjusts the cursor and keeps it inside the visible window.
+func (m *model) moveCursor(d int) {
+	m.cursor = clamp(m.cursor+d, 0, max(0, len(m.wts)-1))
+	vis := m.listVisibleRows()
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	} else if m.cursor >= m.offset+vis {
+		m.offset = m.cursor - vis + 1
+	}
+}
+
 func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok {
 		switch k.String() {
 		case "q", "esc":
 			return m, tea.Quit
 		case "enter":
-			if it, ok := m.list.SelectedItem().(item); ok {
-				fmt.Println(it.wt.Path) // the only stdout write: jump target
+			if len(m.wts) > 0 {
+				fmt.Println(m.wts[m.cursor].Path) // the only stdout write: jump target
 			}
 			return m, tea.Quit
+		case "j", "down":
+			m.moveCursor(1)
+		case "k", "up":
+			m.moveCursor(-1)
+		case "g":
+			m.moveCursor(-len(m.wts))
+		case "G":
+			m.moveCursor(len(m.wts))
 		case "a":
 			m.mode = modeAdd
 			m.status = ""
@@ -157,8 +168,8 @@ func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.inputs[1].Blur()
 			return m, textinput.Blink
 		case "d":
-			if it, ok := m.list.SelectedItem().(item); ok {
-				m.selected = &it.wt
+			if len(m.wts) > 0 {
+				m.selected = m.cursor
 				m.mode = modeConfirmDelete
 			}
 			return m, nil
@@ -169,9 +180,7 @@ func (m model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, listWorktreesCmd
 		}
 	}
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg) // j/k, arrows, g/G via list
-	return m, cmd
+	return m, nil
 }
 
 func (m model) updateAdd(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -211,12 +220,11 @@ func (m model) submitAdd() (tea.Model, tea.Cmd) {
 		m.status = "directory name required (no slashes)"
 		return m, nil
 	}
-	items := m.list.Items()
-	if len(items) == 0 {
+	if len(m.wts) == 0 {
 		m.status = "no worktree list loaded"
 		return m, nil
 	}
-	root := items[0].(item).wt.Path // first porcelain record = main worktree
+	root := m.wts[0].Path // first porcelain record = main worktree
 	path := filepath.Join(root, ".worktrees", dirName)
 	m.status = ""
 	m.mode = modeList // spec §6: success → List; on failure actionMsg returns to modeAdd
@@ -233,13 +241,13 @@ func (m model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyMsg); ok {
 		switch k.String() {
 		case "y", "Y":
-			path := m.selected.Path
+			path := m.wts[m.selected].Path
 			m.mode = modeList
-			m.selected = nil
+			m.selected = -1
 			return m, doCmd(func() error { return removeWorktree(path) })
 		case "n", "N", "esc", "enter":
 			m.mode = modeList
-			m.selected = nil
+			m.selected = -1
 		}
 	}
 	return m, nil
@@ -256,31 +264,6 @@ func (m model) updateConfirmPrune(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
-}
-
-func (m model) View() string {
-	var b strings.Builder
-	switch m.mode {
-	case modeList:
-		b.WriteString(m.list.View())
-	case modeAdd:
-		b.WriteString("New worktree\n\n")
-		b.WriteString("dir:    " + m.inputs[0].View() + "\n")
-		b.WriteString("branch: " + m.inputs[1].View() + "\n\n")
-		b.WriteString(dimStyle.Render("tab: switch field • enter: create • esc: cancel"))
-	case modeConfirmDelete:
-		name := filepath.Base(m.selected.Path)
-		if bn := m.selected.BranchName(); bn != "(detached)" && bn != "(bare)" {
-			name = bn
-		}
-		fmt.Fprintf(&b, "Force remove worktree %s? (y/N)", name)
-	case modeConfirmPrune:
-		b.WriteString("Prune missing/orphaned worktrees? (y/N)")
-	}
-	if m.status != "" {
-		b.WriteString("\n" + statusStyle.Render(m.status))
-	}
-	return b.String()
 }
 
 func main() {

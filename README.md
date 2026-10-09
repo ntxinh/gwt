@@ -13,7 +13,7 @@ Run `gwt` inside any git repository.
 
 | Key | Action |
 |-----|--------|
-| `j`/`k`, `↑`/`↓` | navigate |
+| `j`/`k`, `↑`/`↓`, `g`/`G` | navigate |
 | `enter` | cd into selected worktree |
 | `a` | add worktree at `<repo-root>/.worktrees/<dir>` — branch input optional (empty = git auto-names) |
 | `d` | force-remove selected worktree (y/N) |
@@ -21,4 +21,4 @@ Run `gwt` inside any git repository.
 | `r` | reload |
 | `q` / `esc` | quit |
 
-The UI renders on stderr; the selected path is printed on stdout for the wrapper to `cd`. `.worktrees/` is auto-added to `.git/info/exclude`.
+lazygit-style UI: `Worktrees` and `Details` panels over a keybindings bar; add/delete/prune appear as centered dialogs. The UI renders on stderr; the selected path is printed on stdout for the wrapper to `cd`. `.worktrees/` is auto-added to `.git/info/exclude`.
