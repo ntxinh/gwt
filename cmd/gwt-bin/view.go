@@ -16,9 +16,11 @@ var (
 	inactiveBorder = lipgloss.Color("8")
 	selStyle       = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("236"))
 	curStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	warnStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	warnStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // red: errors, prunable
+	lockStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // yellow: locked, detached
+	branchStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("14")) // cyan: branch names (lazygit FgCyan)
 	dimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	optsStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+	optsStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // blue: options bar (lazygit OptionsTextColor)
 	modalStyle     = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
 			BorderForeground(activeBorder).Padding(0, 1)
 )
@@ -63,18 +65,23 @@ func (m model) rowText(wt Worktree, i int, nameW int) string {
 	if i == m.currentWt {
 		mark = curStyle.Render("*") + " "
 	}
+	// lazygit palette: branch cyan; detached HEAD yellow "(detached at <sha>)"
+	branch := branchStyle.Render(wt.BranchName())
+	if wt.Detached {
+		branch = lockStyle.Render("(detached at " + wt.ShortHead() + ")")
+	}
 	var f []string
 	if wt.Locked {
-		f = append(f, "locked")
+		f = append(f, lockStyle.Render("locked"))
 	}
 	if wt.Prunable {
-		f = append(f, "prunable")
+		f = append(f, warnStyle.Render("prunable"))
 	}
 	if len(f) > 0 {
-		flags = " " + warnStyle.Render("["+strings.Join(f, " ")+"]")
+		flags = " [" + strings.Join(f, " ") + "]"
 	}
 	gap := max(0, nameW-lipgloss.Width(name)) + 2
-	return mark + name + strings.Repeat(" ", gap) + dimStyle.Render(wt.BranchName()) + flags
+	return mark + name + strings.Repeat(" ", gap) + branch + flags
 }
 
 func (m model) worktreeRows(width int) string {
@@ -104,24 +111,24 @@ func (m model) detailsText() string {
 	w := m.wts[m.cursor]
 	var flags []string
 	if w.Bare {
-		flags = append(flags, "bare")
+		flags = append(flags, lockStyle.Render("bare"))
 	}
 	if w.Detached {
-		flags = append(flags, "detached")
+		flags = append(flags, lockStyle.Render("detached"))
 	}
 	if w.Locked {
-		flags = append(flags, "locked")
+		flags = append(flags, lockStyle.Render("locked"))
 	}
 	if w.Prunable {
-		flags = append(flags, "prunable")
+		flags = append(flags, warnStyle.Render("prunable"))
 	}
 	if len(flags) == 0 {
-		flags = append(flags, "—")
+		flags = append(flags, dimStyle.Render("—"))
 	}
 	return fmt.Sprintf("%s %s\n\n%s %s\n%s %s\n%s %s",
 		dimStyle.Render("Path  "), w.Path,
-		dimStyle.Render("Branch"), w.BranchName(),
-		dimStyle.Render("HEAD  "), w.ShortHead(),
+		dimStyle.Render("Branch"), branchStyle.Render(w.BranchName()),
+		dimStyle.Render("HEAD  "), lockStyle.Render(w.ShortHead()),
 		dimStyle.Render("Flags "), strings.Join(flags, ", "))
 }
 
